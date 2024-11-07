@@ -142,17 +142,23 @@ var symbols = []string{
 }
 
 func main() {
-	ctx := context.Background()
 	collector := NewLatencyCollector()
 	client, err := binance.NewWSClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := client.Connect(ctx); err != nil {
+	if err := client.Connect(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
+
+	// 创建交易数据存储
+	store, err := binance.NewTradeStore(symbols)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer store.Close()
 
 	// Register trade handler
 	client.RegisterHandler("trade", collector.WrapHandler(func(msg []byte) error {
@@ -160,8 +166,14 @@ func main() {
 		if err := json.Unmarshal(msg, &trade); err != nil {
 			return err
 		}
-		log.Printf("Trade: Symbol=%s, Price=%s, Quantity=%s, Time=%d",
-			trade.Symbol, trade.Price, trade.Quantity, trade.EventTime)
+
+		// 更新共享内存中的交易数据
+		if err := store.UpdateTrade(&trade); err != nil {
+			log.Printf("Failed to update trade data: %v", err)
+		}
+
+		log.Printf("Trade: Symbol=%s, Price=%s, Quantity=%s",
+			trade.Symbol, trade.Price, trade.Quantity)
 		return nil
 	}))
 
