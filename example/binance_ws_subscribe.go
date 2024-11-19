@@ -96,14 +96,14 @@ func (lc *LatencyCollector) PrintStats() {
 		}
 		stdDev := math.Sqrt(variance / float64(len(latencies)))
 
-		fmt.Printf("\nSymbol: %s\n", symbol)
-		fmt.Printf("Sample size: %d\n", len(latencies))
-		fmt.Printf("Avg: %.2f ms\n", avg)
-		fmt.Printf("Median: %.2f ms\n", percentile(latencies, 50))
-		fmt.Printf("Std Dev: %.2f ms\n", stdDev)
-		fmt.Printf("95th percentile: %.2f ms\n", percentile(latencies, 95))
-		fmt.Printf("99th percentile: %.2f ms\n", percentile(latencies, 99))
-		fmt.Printf("Min: %.2f ms\n", latencies[0])
+		fmt.Printf("\nSymbol: %s ", symbol)
+		fmt.Printf("Sample size: %d ", len(latencies))
+		fmt.Printf("Avg: %.2f ms ", avg)
+		fmt.Printf("Median: %.2f ms ", percentile(latencies, 50))
+		fmt.Printf("Std Dev: %.2f ms ", stdDev)
+		fmt.Printf("95th percentile: %.2f ms ", percentile(latencies, 95))
+		fmt.Printf("99th percentile: %.2f ms ", percentile(latencies, 99))
+		fmt.Printf("Min: %.2f ms ", latencies[0])
 		fmt.Printf("Max: %.2f ms\n", latencies[len(latencies)-1])
 		fmt.Println(strings.Repeat("-", 50))
 	}
@@ -124,7 +124,8 @@ func percentile(sorted []float64, p float64) float64 {
 
 // 添加符号列表常量
 var symbols = []string{
-	"ARKMUSDT", "ZECUSDT", "MANTAUSDT", "ENAUSDT", "ARKUSDT",
+	"ARKMUSDT",
+	"ZECUSDT", "MANTAUSDT", "ENAUSDT", "ARKUSDT",
 	"RIFUSDT", "BEAMXUSDT", "METISUSDT", "1000SATSUSDT", "AMBUSDT",
 	"CHZUSDT", "RENUSDT", "BANANAUSDT", "TAOUSDT", "RAREUSDT",
 	"SXPUSDT", "IDUSDT", "LQTYUSDT", "RPLUSDT", "COMBOUSDT",
