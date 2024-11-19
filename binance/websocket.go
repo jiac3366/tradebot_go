@@ -35,17 +35,6 @@ type SubscribeMsg struct {
 }
 
 // Trade represents a trade message from Binance
-type Trade struct {
-	EventType string `json:"e"`
-	EventTime int64  `json:"E"`
-	Symbol    string `json:"s"`
-	TradeID   int64  `json:"t"`
-	Price     string `json:"p"`
-	Quantity  string `json:"q"`
-	TradeTime int64  `json:"T"`
-	IsMaker   bool   `json:"m"`
-	Ignore    bool   `json:"M"`
-}
 
 // NewWSClient creates a new WebSocket client
 func NewWSClient() (*WSClient, error) {
