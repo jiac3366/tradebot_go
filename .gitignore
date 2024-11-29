@@ -58,3 +58,5 @@ config.yml
 # Generated files
 *.generated.go
 *_string.go
+
+/venv/
