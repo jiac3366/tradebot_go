@@ -13,7 +13,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"tradebot/binance"
+	"tradebot/tradebot_go/binance"
 )
 
 // LatencyCollector 收集延迟统计数据

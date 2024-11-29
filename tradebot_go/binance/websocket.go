@@ -27,13 +27,6 @@ type WSClient struct {
 // MessageHandler is a function type for handling different message types
 type MessageHandler func([]byte) error
 
-// SubscribeMsg represents a subscription message
-type SubscribeMsg struct {
-	Method string   `json:"method"`
-	Params []string `json:"params"`
-	ID     int64    `json:"id"`
-}
-
 // Trade represents a trade message from Binance
 
 // NewWSClient creates a new WebSocket client
