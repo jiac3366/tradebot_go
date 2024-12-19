@@ -21,3 +21,20 @@ go mod tidy
 cd benchmark
 go run benchmark.go
 ```
+
+
+## Plan
+
+### (1) Public Connector
+
+- `ExchangeManager` to fetch meta data for exchange
+- `WSManager` to manage websocket connection 
+- `WSClient` to subscribe to websocket streams
+- `MsgBus` to publish and subscribe to messages
+- `PublicConnector` be combined with `MsgBus` to push market data to `MsgBus`
+
+
+### (2) Private Connector
+
+
+### ()

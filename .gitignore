@@ -59,4 +59,5 @@ config.yml
 *.generated.go
 *_string.go
 
-/venv/
+
+example_test/
