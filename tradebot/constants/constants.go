@@ -78,18 +78,6 @@ const (
 
 type BinanceAccountType string
 
-const (
-	BinanceAccountTypeSpot                BinanceAccountType = "SPOT"
-	BinanceAccountTypeMargin              BinanceAccountType = "MARGIN"
-	BinanceAccountTypeIsolatedMargin      BinanceAccountType = "ISOLATED_MARGIN"
-	BinanceAccountTypeUsdMFutures         BinanceAccountType = "USD_M_FUTURE"
-	BinanceAccountTypeCoinMFutures        BinanceAccountType = "COIN_M_FUTURE"
-	BinanceAccountTypePortfolioMargin     BinanceAccountType = "PORTFOLIO_MARGIN"
-	BinanceAccountTypeSpotTestnet         BinanceAccountType = "SPOT_TESTNET"
-	BinanceAccountTypeUsdMFuturesTestnet  BinanceAccountType = "USD_M_FUTURE_TESTNET"
-	BinanceAccountTypeCoinMFuturesTestnet BinanceAccountType = "COIN_M_FUTURE_TESTNET"
-)
-
 type OkxAccountType string
 
 const (

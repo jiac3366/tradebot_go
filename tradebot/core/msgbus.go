@@ -1,4 +1,4 @@
-package base
+package core
 
 var MessageBus = &MsgBus{
 	listeners: make(map[string][]func(msg any)),

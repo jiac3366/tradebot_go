@@ -1,4 +1,4 @@
-module tradebot
+module tradebot_go
 
 go 1.22.4
 
