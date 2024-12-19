@@ -22,6 +22,13 @@ type WSClient struct {
 	handlers map[string]MessageHandler
 	done     chan struct{}
 	closed   bool
+
+	status *WSClientStatus
+}
+
+type WSClientStatus struct {
+	closed    bool
+	connected bool
 }
 
 // MessageHandler is a function type for handling different message types
@@ -34,12 +41,44 @@ func NewWSClient() (*WSClient, error) {
 	c := &WSClient{
 		handlers: make(map[string]MessageHandler),
 		done:     make(chan struct{}),
+
+		status: &WSClientStatus{
+			closed:    true,
+			connected: false,
+		},
 	}
 	return c, nil
 }
 
+func (c *WSClient) isConnected() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.status.connected
+}
+
+func (c *WSClient) isClosed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.status.closed
+}
+
+func (c *WSClient) setConnected(connected bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.status.connected = connected
+}
+
+func (c *WSClient) setClosed(closed bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.status.closed = closed
+}
+
 // Connect establishes a WebSocket connection
 func (c *WSClient) Connect(ctx context.Context) error {
+	if c.isConnected() {
+		return nil
+	}
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
@@ -54,8 +93,10 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	// Start message handling loop
 	go c.messageLoop()
 
+	// connection break resubs
+
 	// Start ping/pong handler
-	go c.keepAlive()
+	go c.ping()
 
 	return nil
 }
@@ -115,7 +156,6 @@ func (c *WSClient) handleMessage(message []byte) error {
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	// Check if it's a trade message
 	if eventType, ok := raw["e"].(string); ok {
 		switch eventType {
 		case "trade":
@@ -128,8 +168,8 @@ func (c *WSClient) handleMessage(message []byte) error {
 	return nil
 }
 
-// keepAlive handles ping/pong messages
-func (c *WSClient) keepAlive() {
+// ping/pong messages
+func (c *WSClient) ping() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 

@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"tradebot/binance"
+	"tradebot/tradebot_go/binance"
 )
 
 func main() {
