@@ -8,10 +8,6 @@ import (
 	"tradebot_go/tradebot/core"
 )
 
-const (
-	baseWSURL = "wss://stream.binance.com:9443/ws"
-)
-
 // WSCliBinanceWSClientent represents a Binance WebSocket client
 type BinanceWSClient struct {
 	*core.WSClient // core.WSClient is wrong as we're copying a mutex when embedding the WSClient.

@@ -37,10 +37,7 @@ func TestBinanceWSClientConnect(t *testing.T) {
 		return nil
 	}
 
-	acctType := BinanceAccountTypeUsdMFutures
-
-	// Create and connect client
-	client, err := NewBinanceWSClient(acctType, handler)
+	client, err := NewBinanceWSClient(BinanceAccountTypeUsdMFuturesTestnet, handler)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -52,19 +49,10 @@ func TestBinanceWSClientConnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}
-
-	// client.Subscribe2("BTCUSDT", []string{"trade"})
 	client.Subscribe("btcusdt", "trade")
 
-	// Wait for message or timeout
-	select {
-	// case <-messageReceived:
-	// 	// Success
-	case <-time.After(20 * time.Second):
-		// t.Error("timeout waiting for message")
-	}
+	time.Sleep(15 * time.Second)
 
-	// Test close
 	if err := client.Close(); err != nil {
 		t.Errorf("failed to close connection: %v", err)
 	}
