@@ -117,7 +117,7 @@ func (c *WSClient) handleMessage(message []byte) error {
 		return nil
 	}
 
-	fmt.Printf("%+v\n", raw)
+	// fmt.Printf("%+v\n", raw)
 	return c.handler(raw)
 }
 
