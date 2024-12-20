@@ -46,4 +46,3 @@ var BinanceWebSocketURLs = map[BinanceAccountType]string{
 	BinanceAccountTypeUsdMFuturesTestnet:  "wss://stream.binancefuture.com/ws",
 	BinanceAccountTypeCoinMFuturesTestnet: "wss://dstream.binancefuture.com/ws",
 }
-1

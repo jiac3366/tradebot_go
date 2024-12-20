@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+var logger = log.New(os.Stdout, "", log.LstdFlags)
 
 // WSClient represents a Binance WebSocket client
 type WSClient struct {
@@ -57,14 +60,16 @@ func (c *WSClient) Connect(ctx context.Context) error {
 		HandshakeTimeout: 10 * time.Second,
 	}
 
-	conn, _, err := dialer.DialContext(ctx, url, nil)
+	conn, _, err := dialer.DialContext(ctx, c.url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to connect to websocket: %w", err)
 	}
 	c.conn = conn
+	c.setConnected()
+	fmt.Println("connected")
 
 	go c.messageLoop()
-	go c.ping()
+	// go c.Ping(1 * time.Second)
 
 	return nil
 }
@@ -78,13 +83,13 @@ func (c *WSClient) messageLoop() {
 		default:
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
-				log.Printf("error reading message: %v", err)
+				logger.Printf("error reading message: %v", err)
 				return
 			}
 
 			// Handle the message
 			if err := c.handleMessage(message); err != nil {
-				log.Printf("error handling message: %v", err)
+				logger.Printf("error handling message: %v", err)
 			}
 		}
 	}
@@ -92,40 +97,34 @@ func (c *WSClient) messageLoop() {
 
 // handleMessage processes incoming messages
 func (c *WSClient) handleMessage(message []byte) error {
-	// todo: map[string]interface{}
+	// 1. 首先检查是否是 ping frame
 	var raw map[string]interface{}
 	if err := json.Unmarshal(message, &raw); err != nil {
+		// 可能是 ping frame，需要回复 pong
+		if string(message) == "ping" {
+			if err := c.conn.WriteMessage(websocket.TextMessage, []byte("pong")); err != nil {
+				return fmt.Errorf("failed to send pong: %w", err)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	return c.WsHandleData(raw)
-}
-
-// handle by exchange stucture
-func (c *WSClient) WsHandleData(raw map[string]interface{}) error {
-	return nil
-}
-
-// ping/pong messages
-func (c *WSClient) ping() {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.done:
-			return
-		case <-ticker.C:
-			if err := c.conn.WriteMessage(websocket.PongMessage, nil); err != nil {
-				log.Printf("failed to send pong: %v", err)
-				return
-			}
-		}
+	// 2. 检查是否是订阅响应消息
+	if _, ok := raw["result"]; ok {
+		// 这是订阅响应消息，可以记录日志但不需要进一步处理
+		logger.Printf("Subscription response: %+v", raw)
+		return nil
 	}
+
+	fmt.Printf("%+v\n", raw)
+	return c.handler(raw)
 }
 
 // writeJSON sends a JSON message through the WebSocket connection
 func (c *WSClient) WriteJSON(v interface{}) error {
+	// fmt v
+	fmt.Println(v)
 	return c.conn.WriteJSON(v)
 }
 
@@ -149,4 +148,34 @@ func (c *WSClient) Close() error {
 // reconnect
 func (c *WSClient) reconnect() error {
 	return c.Connect(context.Background())
+}
+
+func (c *WSClient) Ping(interval time.Duration) {
+	// default to 3 minutes
+	if interval == 0 {
+		interval = 3 * time.Minute
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			c.mu.Lock()
+			if c.conn == nil || c.status != "connected" {
+				c.mu.Unlock()
+				logger.Printf("connection not established, skipping ping")
+				return
+			}
+
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				c.mu.Unlock()
+				logger.Printf("failed to send ping: %v", err)
+				return
+			}
+			c.mu.Unlock()
+		}
+	}
 }
