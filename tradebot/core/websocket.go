@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"sync"
 	"time"
 
+	log "github.com/BitofferHub/pkg/middlewares/log"
 	"github.com/gorilla/websocket"
 )
-
-var logger = log.New(os.Stdout, "", log.LstdFlags)
 
 // WSClient represents a Binance WebSocket client
 type WSClient struct {
@@ -56,26 +53,29 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	if c.isConnected() {
 		return nil
 	}
-	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
-	}
-
-	conn, _, err := dialer.DialContext(ctx, c.url, nil)
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, c.url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to connect to websocket: %w", err)
+		log.Errorf("Failed to connect to WebSocket")
+		return err
 	}
-	c.conn = conn
-	c.setConnected()
-	fmt.Println("connected")
 
+	c.conn = conn
+	log.Infof("Successfully connected to WebSocket")
+
+	// Start read/write pumps
 	go c.messageLoop()
-	// go c.Ping(1 * time.Second)
+	go c.Ping(1 * time.Second)
 
 	return nil
 }
 
 // messageLoop handles incoming WebSocket messages
 func (c *WSClient) messageLoop() {
+	defer func() {
+		c.conn.Close()
+		log.Debug("WebSocket connection closed")
+	}()
+
 	for {
 		select {
 		case <-c.done:
@@ -83,13 +83,15 @@ func (c *WSClient) messageLoop() {
 		default:
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
-				logger.Printf("error reading message: %v", err)
+				if websocket.IsUnexpectedCloseError(err) {
+					log.Error("WebSocket unexpected close")
+				}
 				return
 			}
 
 			// Handle the message
 			if err := c.handleMessage(message); err != nil {
-				logger.Printf("error handling message: %v", err)
+				log.Error("Error handling message")
 			}
 		}
 	}
@@ -113,7 +115,7 @@ func (c *WSClient) handleMessage(message []byte) error {
 	// 2. 检查是否是订阅响应消息
 	if _, ok := raw["result"]; ok {
 		// 这是订阅响应消息，可以记录日志但不需要进一步处理
-		logger.Printf("Subscription response: %+v", raw)
+		log.Info("Subscription response")
 		return nil
 	}
 
@@ -166,13 +168,13 @@ func (c *WSClient) Ping(interval time.Duration) {
 			c.mu.Lock()
 			if c.conn == nil || c.status != "connected" {
 				c.mu.Unlock()
-				logger.Printf("connection not established, skipping ping")
+				log.Debug("connection not established, skipping ping")
 				return
 			}
 
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.mu.Unlock()
-				logger.Printf("failed to send ping: %v", err)
+				log.Error("Failed to write ping message")
 				return
 			}
 			c.mu.Unlock()

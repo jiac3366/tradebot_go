@@ -45,7 +45,6 @@ func HandleTradeMessage(msg map[string]interface{}) (*binance.Trade, error) {
 }
 
 func main() {
-
 	client, err := binance.NewBinanceWSClient(binance.BinanceAccountTypeUsdMFuturesTestnet, func(msg map[string]interface{}) error {
 		trade, err := HandleTradeMessage(msg)
 		if err != nil {
