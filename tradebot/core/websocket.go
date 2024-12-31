@@ -7,126 +7,189 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/BitofferHub/pkg/middlewares/log"
 	"github.com/gorilla/websocket"
+
+	log "github.com/BitofferHub/pkg/middlewares/log"
 )
 
-// WSClient represents a Binance WebSocket client
+// Add new connection states
+const (
+	StatusDisconnected = "disconnected"
+	StatusConnected    = "connected"
+	StatusReconnecting = "reconnecting"
+)
+
+type MessageHandler func(message map[string]interface{}) error
+
+// WSClient represents a WebSocket client
 type WSClient struct {
-	url     string
-	handler MessageHandler
-	done    chan struct{}
-	status  string
+	url        string
+	handler    MessageHandler
+	done       chan struct{}
+	status     string
+	mu         sync.RWMutex
+	conn       *websocket.Conn
+	maxRetries int
 
-	mu   sync.Mutex
-	conn *websocket.Conn
+	// Add reconnection configuration
+	reconnectWait    time.Duration
+	reconnectAttempt int
 }
 
-// MessageHandler is a function type for handling different message types
-type MessageHandler func(map[string]interface{}) error
-
-// NewWSClient creates a new WebSocket client
+// NewWSClient creates a new WebSocket client with improved configuration
 func NewWSClient(url string, handler MessageHandler) (*WSClient, error) {
-	c := &WSClient{
-		url:     url,
-		handler: handler,
-		done:    make(chan struct{}),
-		status:  "disconnected",
+	if url == "" {
+		return nil, fmt.Errorf("websocket URL cannot be empty")
 	}
-	return c, nil
+	if handler == nil {
+		return nil, fmt.Errorf("message handler cannot be nil")
+	}
+
+	return &WSClient{
+		url:           url,
+		handler:       handler,
+		done:          make(chan struct{}),
+		status:        StatusDisconnected,
+		maxRetries:    5,
+		reconnectWait: 5 * time.Second,
+	}, nil
 }
 
-func (c *WSClient) isConnected() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.status == "connected"
-}
-
-func (c *WSClient) setConnected() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.status = "connected"
-}
-
-// Connect establishes a WebSocket connection
+// Connect with improved error handling and connection management
 func (c *WSClient) Connect(ctx context.Context) error {
-	if c.isConnected() {
+	c.mu.Lock()
+	if c.status == StatusConnected {
+		c.mu.Unlock()
 		return nil
 	}
+	c.status = StatusReconnecting
+	c.mu.Unlock()
+
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, c.url, nil)
 	if err != nil {
-		log.Errorf("Failed to connect to WebSocket")
-		return err
+		c.mu.Lock()
+		c.status = StatusDisconnected
+		c.mu.Unlock()
+		return fmt.Errorf("websocket connection failed: %w", err)
 	}
 
+	c.mu.Lock()
 	c.conn = conn
-	log.Infof("Successfully connected to WebSocket")
+	c.status = StatusConnected
+	c.reconnectAttempt = 0
+	c.mu.Unlock()
 
-	// Start read/write pumps
-	go c.messageLoop()
+	// Start handlers in separate goroutines
+	go c.messageLoop(ctx)
 	go c.Ping(1 * time.Second)
 
+	log.Infof("Successfully connected to WebSocket at %s", c.url)
 	return nil
 }
 
-// messageLoop handles incoming WebSocket messages
-func (c *WSClient) messageLoop() {
+// messageLoop with improved error handling and reconnection logic
+func (c *WSClient) messageLoop(ctx context.Context) {
 	defer func() {
-		c.conn.Close()
-		log.Debug("WebSocket connection closed")
+		c.mu.Lock()
+		if c.conn != nil {
+			c.conn.Close()
+		}
+		c.status = StatusDisconnected
+		c.mu.Unlock()
 	}()
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-c.done:
 			return
 		default:
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err) {
-					log.Error("WebSocket unexpected close")
+					log.Errorf("Unexpected websocket closure: %v", err)
+					c.tryReconnect(ctx)
+					return
+				}
+				if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+					log.Errorf("Websocket read error: %v", err)
+					c.tryReconnect(ctx)
+					return
 				}
 				return
 			}
 
-			// Handle the message
 			if err := c.handleMessage(message); err != nil {
-				log.Error("Error handling message")
+				log.Errorf("Message handling error: %v", err)
 			}
 		}
 	}
 }
 
+// tryReconnect implements exponential backoff reconnection
+func (c *WSClient) tryReconnect(ctx context.Context) {
+	c.mu.Lock()
+	if c.status == StatusReconnecting {
+		c.mu.Unlock()
+		return
+	}
+	c.status = StatusReconnecting
+	c.mu.Unlock()
+
+	for c.reconnectAttempt < c.maxRetries {
+		wait := c.reconnectWait * time.Duration(1<<uint(c.reconnectAttempt))
+		log.Infof("Attempting to reconnect in %v (attempt %d/%d)", wait, c.reconnectAttempt+1, c.maxRetries)
+
+		time.Sleep(wait)
+
+		if err := c.Connect(ctx); err == nil {
+			return
+		}
+
+		c.mu.Lock()
+		c.reconnectAttempt++
+		c.mu.Unlock()
+	}
+
+	log.Error("Max reconnection attempts reached")
+}
+
 // handleMessage processes incoming messages
 func (c *WSClient) handleMessage(message []byte) error {
-	// 1. 首先检查是否是 ping frame
+	// Parse the message
 	var raw map[string]interface{}
 	if err := json.Unmarshal(message, &raw); err != nil {
-		// 可能是 ping frame，需要回复 pong
+		// Handle ping frame
 		if string(message) == "ping" {
 			if err := c.conn.WriteMessage(websocket.TextMessage, []byte("pong")); err != nil {
 				return fmt.Errorf("failed to send pong: %w", err)
 			}
+			log.Debug("Sent pong response")
 			return nil
 		}
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	// 2. 检查是否是订阅响应消息
+	// Handle subscription response
 	if _, ok := raw["result"]; ok {
-		// 这是订阅响应消息，可以记录日志但不需要进一步处理
-		log.Info("Subscription response")
+		log.Info("Received subscription response")
 		return nil
 	}
 
-	// fmt.Printf("%+v\n", raw)
+	// Handle the message using the provided handler
 	return c.handler(raw)
 }
 
-// writeJSON sends a JSON message through the WebSocket connection
+// WriteJSON sends a JSON message through the WebSocket connection
 func (c *WSClient) WriteJSON(v interface{}) error {
-	// fmt v
-	fmt.Println(v)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn == nil {
+		return fmt.Errorf("connection is not established")
+	}
+
 	return c.conn.WriteJSON(v)
 }
 
@@ -135,10 +198,10 @@ func (c *WSClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.status == "disconnected" {
+	if c.status == StatusDisconnected {
 		return nil
 	}
-	c.status = "disconnected"
+	c.status = StatusDisconnected
 
 	close(c.done)
 	if c.conn != nil {
@@ -147,13 +210,8 @@ func (c *WSClient) Close() error {
 	return nil
 }
 
-// reconnect
-func (c *WSClient) reconnect() error {
-	return c.Connect(context.Background())
-}
-
+// Ping sends periodic ping messages to keep the connection alive
 func (c *WSClient) Ping(interval time.Duration) {
-	// default to 3 minutes
 	if interval == 0 {
 		interval = 3 * time.Minute
 	}
@@ -165,19 +223,24 @@ func (c *WSClient) Ping(interval time.Duration) {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			c.mu.Lock()
-			if c.conn == nil || c.status != "connected" {
-				c.mu.Unlock()
-				log.Debug("connection not established, skipping ping")
-				return
+			c.mu.RLock()
+			if c.conn == nil || c.status != StatusConnected {
+				c.mu.RUnlock()
+				log.Debug("Connection not established, skipping ping")
+				continue
 			}
+			c.mu.RUnlock()
 
+			c.mu.Lock()
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Errorf("Failed to write ping message: %v", err)
 				c.mu.Unlock()
-				log.Error("Failed to write ping message")
-				return
+				c.tryReconnect(context.Background())
+				continue
 			}
 			c.mu.Unlock()
+
+			log.Debug("Ping message sent successfully")
 		}
 	}
 }

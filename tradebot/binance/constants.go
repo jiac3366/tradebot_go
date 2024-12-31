@@ -18,7 +18,7 @@ type Trade struct {
 	TradeTime  int64  `json:"T"`
 	IsMaker    bool   `json:"m"`
 	Ignore     bool   `json:"M"`
-	MarketType bool   `json:"X"`
+	MarketType string `json:"X"`
 }
 
 type BinanceAccountType string
