@@ -4,15 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"tradebot_go/tradebot/binance"
 )
 
+// 添加一个全局变量来存储 client
+var wsClient *binance.BinanceWSClient
+
 func handleTradeStream(msg map[string]interface{}) error {
-	// 使用 BinanceWSClient 的 HandleTradeMessage 方法
-	client := &binance.BinanceWSClient{}
-	trade, err := client.HandleTradeMessage(msg)
+	fmt.Printf("Received raw message: %+v\n", msg)
+	trade, err := wsClient.HandleTradeMessage(msg)
 	if err != nil {
 		return fmt.Errorf("failed to handle trade message: %w", err)
 	}
@@ -25,8 +30,9 @@ func handleTradeStream(msg map[string]interface{}) error {
 }
 
 func main() {
-	// 创建 WebSocket 客户端
-	client, err := binance.NewBinanceWSClient(
+	var err error
+	// 将 client 赋值给全局变量
+	wsClient, err = binance.NewBinanceWSClient(
 		binance.BinanceAccountTypeUsdMFuturesTestnet,
 		handleTradeStream,
 	)
@@ -39,16 +45,26 @@ func main() {
 	defer cancel()
 
 	// 建立连接
-	if err := client.Connect(ctx); err != nil {
+	if err := wsClient.Connect(ctx); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer client.Close()
+	defer wsClient.Close()
 
 	// 订阅交易流
-	if err := client.Subscribe("btcusdt", "trade"); err != nil {
+	if err := wsClient.Subscribe("btcusdt", "trade"); err != nil {
 		log.Fatalf("Failed to subscribe: %v", err)
 	}
 
-	// 运行 15 秒后退出
-	time.Sleep(30 * time.Second)
+	// 创建一个通道来处理信号
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// 添加必要的导入
+	fmt.Println("Websocket client is running. Press CTRL+C to stop...")
+
+	// 等待信号而不是使用 sleep
+	<-sigChan
+
+	fmt.Println("\nShutting down gracefully...")
+	wsClient.Close()
 }

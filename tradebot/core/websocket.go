@@ -65,7 +65,8 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	c.status = StatusReconnecting
 	c.mu.Unlock()
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, c.url, nil)
+	dialer := websocket.DefaultDialer
+	conn, _, err := dialer.DialContext(ctx, c.url, nil)
 	if err != nil {
 		c.mu.Lock()
 		c.status = StatusDisconnected
@@ -73,15 +74,36 @@ func (c *WSClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("websocket connection failed: %w", err)
 	}
 
+	// 设置 Binance ping-pong 处理
+	// Binance 服务器每3分钟发送一次 ping frame，我们需要在10分钟内回应 pong frame
+	conn.SetPingHandler(func(appData string) error {
+		err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+		if err != nil {
+			log.Errorf("Failed to send pong: %v", err)
+			return err
+		}
+		log.Debug("Sent pong response")
+		return nil
+	})
+
+	// 设置读取超时为15分钟（大于Binance的10分钟限制）
+	conn.SetReadDeadline(time.Now().Add(15 * time.Minute))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(15 * time.Minute))
+		return nil
+	})
+
 	c.mu.Lock()
 	c.conn = conn
 	c.status = StatusConnected
 	c.reconnectAttempt = 0
 	c.mu.Unlock()
 
-	// Start handlers in separate goroutines
+	// Start message loop
 	go c.messageLoop(ctx)
-	// go c.Ping(3 * time.Second)
+
+	// 不需要主动发送ping，因为Binance服务器会发送ping
+	// go c.Ping(30 * time.Second)
 
 	log.Infof("Successfully connected to WebSocket at %s", c.url)
 	return nil
@@ -105,8 +127,9 @@ func (c *WSClient) messageLoop(ctx context.Context) {
 		case <-c.done:
 			return
 		default:
-			_, message, err := c.conn.ReadMessage()
+			messageType, message, err := c.conn.ReadMessage()
 			if err != nil {
+				log.Errorf("ReadMessage error: %v, messageType: %d", err, messageType)
 				if websocket.IsUnexpectedCloseError(err) {
 					log.Errorf("Unexpected websocket closure: %v", err)
 					c.tryReconnect(ctx)
@@ -157,19 +180,10 @@ func (c *WSClient) tryReconnect(ctx context.Context) {
 
 // handleMessage processes incoming messages
 func (c *WSClient) handleMessage(message []byte) error {
-	// Parse the message
-
 	log.Debugf("Received message: %s", string(message))
 
 	var raw map[string]interface{}
 	if err := json.Unmarshal(message, &raw); err != nil {
-		// if string(message) == "ping" {
-		// 	if err := c.conn.WriteMessage(websocket.TextMessage, []byte("pong")); err != nil {
-		// 		return fmt.Errorf("failed to send pong: %w", err)
-		// 	}
-		// 	log.Debug("Sent pong response")
-		// 	return nil
-		// }
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
@@ -208,39 +222,4 @@ func (c *WSClient) Close() error {
 		return c.conn.Close()
 	}
 	return nil
-}
-
-// Ping sends periodic ping messages to keep the connection alive
-func (c *WSClient) Ping(interval time.Duration) {
-	if interval == 0 {
-		interval = 3 * time.Minute
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.done:
-			return
-		case <-ticker.C:
-			c.mu.RLock()
-			if c.conn == nil || c.status != StatusConnected {
-				c.mu.RUnlock()
-				log.Debug("Connection not established, skipping ping")
-				continue
-			}
-			c.mu.RUnlock()
-
-			c.mu.Lock()
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Errorf("Failed to write ping message: %v", err)
-				c.mu.Unlock()
-				c.tryReconnect(context.Background())
-				continue
-			}
-			c.mu.Unlock()
-
-			log.Debug("Ping message sent successfully")
-		}
-	}
 }
