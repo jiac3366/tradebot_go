@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 	"tradebot_go/tradebot/core"
+
+	log "github.com/BitofferHub/pkg/middlewares/log"
 )
 
 // WSCliBinanceWSClientent represents a Binance WebSocket client
@@ -34,6 +36,8 @@ func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
 		ID:     time.Now().UnixNano(),
 	}
 
+	log.Infof("Subscribing to %s@%s", symbol, streams)
+
 	return c.wsClient.WriteJSON(msg)
 }
 
@@ -49,13 +53,11 @@ func (c *BinanceWSClient) Connect(ctx context.Context) error {
 
 // HandleTradeMessage converts raw message to Trade struct
 func (c *BinanceWSClient) HandleTradeMessage(msg map[string]interface{}) (*Trade, error) {
-	// Convert map to JSON bytes
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Unmarshal JSON bytes to Trade struct
 	trade := &Trade{}
 	if err := json.Unmarshal(jsonBytes, trade); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal trade: %w", err)

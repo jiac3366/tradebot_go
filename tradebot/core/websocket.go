@@ -81,7 +81,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 
 	// Start handlers in separate goroutines
 	go c.messageLoop(ctx)
-	go c.Ping(1 * time.Second)
+	// go c.Ping(3 * time.Second)
 
 	log.Infof("Successfully connected to WebSocket at %s", c.url)
 	return nil
@@ -158,26 +158,26 @@ func (c *WSClient) tryReconnect(ctx context.Context) {
 // handleMessage processes incoming messages
 func (c *WSClient) handleMessage(message []byte) error {
 	// Parse the message
+
+	log.Debugf("Received message: %s", string(message))
+
 	var raw map[string]interface{}
 	if err := json.Unmarshal(message, &raw); err != nil {
-		// Handle ping frame
-		if string(message) == "ping" {
-			if err := c.conn.WriteMessage(websocket.TextMessage, []byte("pong")); err != nil {
-				return fmt.Errorf("failed to send pong: %w", err)
-			}
-			log.Debug("Sent pong response")
-			return nil
-		}
+		// if string(message) == "ping" {
+		// 	if err := c.conn.WriteMessage(websocket.TextMessage, []byte("pong")); err != nil {
+		// 		return fmt.Errorf("failed to send pong: %w", err)
+		// 	}
+		// 	log.Debug("Sent pong response")
+		// 	return nil
+		// }
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
 	// Handle subscription response
 	if _, ok := raw["result"]; ok {
-		log.Info("Received subscription response")
 		return nil
 	}
 
-	// Handle the message using the provided handler
 	return c.handler(raw)
 }
 
