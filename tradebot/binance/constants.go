@@ -1,12 +1,5 @@
 package binance
 
-// SubscribeMsg represents a subscription message
-type SubscribeMsg struct {
-	Method string   `json:"method"`
-	Params []string `json:"params"`
-	ID     int64    `json:"id"`
-}
-
 // Trade represents a trade message from Binance
 type Trade struct {
 	EventType  string `json:"e"`

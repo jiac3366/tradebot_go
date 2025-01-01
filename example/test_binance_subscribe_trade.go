@@ -41,7 +41,7 @@ func main() {
 	}
 
 	// // 设置连接超时
-	// ctx, cancel := core.NewTimeoutContext(5 * time.Second)
+	// ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	// defer cancel()
 
 	// 建立连接
@@ -55,6 +55,8 @@ func main() {
 		log.Fatalf("Failed to subscribe: %v", err)
 	}
 
+	time.Sleep(15 * time.Second)
+	wsClient.Close()
 	// 创建一个通道来处理信号
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

@@ -30,9 +30,11 @@ func NewBinanceWSClient(accountType BinanceAccountType, handler core.MessageHand
 
 // Subscribe subscribes to a market data stream
 func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
-	msg := SubscribeMsg{
+	subId := fmt.Sprintf("%s@%s", symbol, streams)
+	c.wsClient.SubscribedStreams = append(c.wsClient.SubscribedStreams, subId)
+	msg := core.SubscribeMsg{
 		Method: "SUBSCRIBE",
-		Params: []string{fmt.Sprintf("%s@%s", symbol, streams)},
+		Params: []string{subId},
 		ID:     time.Now().UnixNano(),
 	}
 

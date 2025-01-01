@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	log "github.com/BitofferHub/pkg/middlewares/log"
+	"golang.org/x/time/rate"
 )
 
 // Add new connection states
@@ -32,8 +33,10 @@ type WSClient struct {
 	maxRetries int
 
 	// Add reconnection configuration
-	reconnectWait    time.Duration
-	reconnectAttempt int
+	reconnectWait     time.Duration
+	reconnectAttempt  int
+	SubscribedStreams []string
+	limiter           *rate.Limiter // Rate limiter for resubscription
 }
 
 // NewWSClient creates a new WebSocket client with improved configuration
@@ -52,6 +55,7 @@ func NewWSClient(url string, handler MessageHandler) (*WSClient, error) {
 		status:        StatusDisconnected,
 		maxRetries:    5,
 		reconnectWait: 5 * time.Second,
+		limiter:       rate.NewLimiter(rate.Every(300*time.Millisecond), 1), // 300ms per request, burst size of 1
 	}, nil
 }
 
@@ -100,7 +104,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	c.mu.Unlock()
 
 	// Start message loop
-	go c.messageLoop()
+	go c.messageLoop(ctx)
 
 	// 不需要主动发送ping，因为Binance服务器会发送ping
 	// go c.Ping(30 * time.Second)
@@ -110,20 +114,22 @@ func (c *WSClient) Connect(ctx context.Context) error {
 }
 
 // messageLoop with improved error handling and reconnection logic
-func (c *WSClient) messageLoop() {
-	defer func() {
-		c.mu.Lock()
-		if c.conn != nil {
-			c.conn.Close()
-		}
-		c.status = StatusDisconnected
-		c.mu.Unlock()
-	}()
+func (c *WSClient) messageLoop(ctx context.Context) {
+	// defer func() {
+	// 	c.mu.Lock()
+	// 	if c.conn != nil {
+	// 		log.Infof("Closing websocket connection")
+	// 		c.conn.Close()
+	// 	}
+	// 	c.status = StatusDisconnected
+	// 	c.mu.Unlock()
+	// }()
+
 
 	for {
 		select {
-		// case <-ctx.Done():
-		// 	return
+		case <-ctx.Done():
+			return
 		case <-c.done:
 			return
 		default:
@@ -152,12 +158,18 @@ func (c *WSClient) messageLoop() {
 
 // tryReconnect implements exponential backoff reconnection
 func (c *WSClient) tryReconnect() {
+	log.Infof("tryReconnect")
+
 	c.mu.Lock()
 	if c.status == StatusReconnecting {
 		c.mu.Unlock()
 		return
 	}
-	c.status = StatusReconnecting
+
+	if c.conn != nil {
+		log.Infof("tryReconnect: Closing websocket connection first")
+		c.conn.Close()
+	}
 	c.mu.Unlock()
 
 	for c.reconnectAttempt < c.maxRetries {
@@ -167,7 +179,8 @@ func (c *WSClient) tryReconnect() {
 		time.Sleep(wait)
 
 		if err := c.Connect(context.Background()); err == nil {
-			return
+			log.Info("Reconnected successfully")
+			break
 		}
 
 		c.mu.Lock()
@@ -175,7 +188,35 @@ func (c *WSClient) tryReconnect() {
 		c.mu.Unlock()
 	}
 
-	log.Error("Max reconnection attempts reached")
+	c.mu.Lock()
+	if c.reconnectAttempt == c.maxRetries {
+		log.Error("Max reconnection attempts reached")
+		c.status = StatusDisconnected
+		c.mu.Unlock()
+	} else {
+		c.mu.Unlock()
+		// Resubscribe with rate limiting
+		log.Infof("Resubscribing with rate limiting %v", c.SubscribedStreams)
+		for _, subId := range c.SubscribedStreams {
+			// Wait for rate limiter
+			err := c.limiter.Wait(context.Background())
+			if err != nil {
+				log.Errorf("Rate limiter error: %v", err)
+				continue
+			}
+
+			err = c.WriteJSON(SubscribeMsg{
+				Method: "SUBSCRIBE",
+				Params: []string{subId},
+				ID:     time.Now().UnixNano(),
+			})
+			if err != nil {
+				log.Errorf("Failed to resubscribe to %s: %v", subId, err)
+			} else {
+				log.Infof("Resubscribed to %s", subId)
+			}
+		}
+	}
 }
 
 // handleMessage processes incoming messages
