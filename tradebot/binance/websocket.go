@@ -45,7 +45,7 @@ func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
 
 // Close closes the websocket connection
 func (c *BinanceWSClient) Close() error {
-	return c.wsClient.Close()
+	return c.wsClient.Close2()
 }
 
 // Connect establishes the websocket connection

@@ -59,22 +59,32 @@ func NewWSClient(url string, handler MessageHandler) (*WSClient, error) {
 	}, nil
 }
 
+func (c *WSClient) IsConnected() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.status == StatusConnected
+}
+
 // Connect with improved error handling and connection management
 func (c *WSClient) Connect(ctx context.Context) error {
-	c.mu.Lock()
-	if c.status == StatusConnected {
+	defer func() {
+		c.mu.Lock()
+		if c.status != StatusConnected {
+			c.status = StatusDisconnected
+		}
 		c.mu.Unlock()
+	}()
+
+	if c.IsConnected() {
 		return nil
 	}
+	c.mu.Lock()
 	c.status = StatusReconnecting
 	c.mu.Unlock()
 
 	dialer := websocket.DefaultDialer
 	conn, _, err := dialer.DialContext(ctx, c.url, nil)
 	if err != nil {
-		c.mu.Lock()
-		c.status = StatusDisconnected
-		c.mu.Unlock()
 		return fmt.Errorf("websocket connection failed: %w", err)
 	}
 
@@ -91,7 +101,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	})
 
 	// 设置读取超时为15分钟（大于Binance的10分钟限制）
-	conn.SetReadDeadline(time.Now().Add(15 * time.Minute))
+	conn.SetReadDeadline(time.Time{})
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(15 * time.Minute))
 		return nil
@@ -103,7 +113,6 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	c.reconnectAttempt = 0
 	c.mu.Unlock()
 
-	// Start message loop
 	go c.messageLoop(ctx)
 
 	// 不需要主动发送ping，因为Binance服务器会发送ping
@@ -115,37 +124,26 @@ func (c *WSClient) Connect(ctx context.Context) error {
 
 // messageLoop with improved error handling and reconnection logic
 func (c *WSClient) messageLoop(ctx context.Context) {
-	// defer func() {
-	// 	c.mu.Lock()
-	// 	if c.conn != nil {
-	// 		log.Infof("Closing websocket connection")
-	// 		c.conn.Close()
-	// 	}
-	// 	c.status = StatusDisconnected
-	// 	c.mu.Unlock()
-	// }()
 
+	// 设置一个更合理的 read deadline
+	const readTimeout = 1 * time.Minute
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Infof("messageLoop: ctx.Done")
 			return
 		case <-c.done:
+			log.Infof("messageLoop: done")
 			return
 		default:
+			// 为每次读取设置新的 deadline
+			c.conn.SetReadDeadline(time.Now().Add(readTimeout))
+
 			messageType, message, err := c.conn.ReadMessage()
 			if err != nil {
 				log.Errorf("ReadMessage error: %v, messageType: %d", err, messageType)
-				if websocket.IsUnexpectedCloseError(err) {
-					log.Errorf("Unexpected websocket closure: %v", err)
-					c.tryReconnect()
-					return
-				}
-				if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-					log.Errorf("Websocket read error: %v", err)
-					c.tryReconnect()
-					return
-				}
+				c.tryReconnect()
 				return
 			}
 
@@ -158,6 +156,14 @@ func (c *WSClient) messageLoop(ctx context.Context) {
 
 // tryReconnect implements exponential backoff reconnection
 func (c *WSClient) tryReconnect() {
+	defer func() {
+		c.mu.Lock()
+		if c.status != StatusConnected {
+			c.status = StatusDisconnected
+		}
+		c.mu.Unlock()
+	}()
+
 	log.Infof("tryReconnect")
 
 	c.mu.Lock()
@@ -169,6 +175,7 @@ func (c *WSClient) tryReconnect() {
 	if c.conn != nil {
 		log.Infof("tryReconnect: Closing websocket connection first")
 		c.conn.Close()
+		c.status = StatusDisconnected
 	}
 	c.mu.Unlock()
 
@@ -188,13 +195,9 @@ func (c *WSClient) tryReconnect() {
 		c.mu.Unlock()
 	}
 
-	c.mu.Lock()
 	if c.reconnectAttempt == c.maxRetries {
 		log.Error("Max reconnection attempts reached")
-		c.status = StatusDisconnected
-		c.mu.Unlock()
 	} else {
-		c.mu.Unlock()
 		// Resubscribe with rate limiting
 		log.Infof("Resubscribing with rate limiting %v", c.SubscribedStreams)
 		for _, subId := range c.SubscribedStreams {
@@ -264,3 +267,15 @@ func (c *WSClient) Close() error {
 	}
 	return nil
 }
+
+func (c *WSClient) Close2() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
+}
+
+// WriteJson --> writejson
