@@ -100,7 +100,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	c.mu.Unlock()
 
 	// Start message loop
-	go c.messageLoop(ctx)
+	go c.messageLoop()
 
 	// 不需要主动发送ping，因为Binance服务器会发送ping
 	// go c.Ping(30 * time.Second)
@@ -110,7 +110,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 }
 
 // messageLoop with improved error handling and reconnection logic
-func (c *WSClient) messageLoop(ctx context.Context) {
+func (c *WSClient) messageLoop() {
 	defer func() {
 		c.mu.Lock()
 		if c.conn != nil {
@@ -122,8 +122,8 @@ func (c *WSClient) messageLoop(ctx context.Context) {
 
 	for {
 		select {
-		case <-ctx.Done():
-			return
+		// case <-ctx.Done():
+		// 	return
 		case <-c.done:
 			return
 		default:
@@ -132,12 +132,12 @@ func (c *WSClient) messageLoop(ctx context.Context) {
 				log.Errorf("ReadMessage error: %v, messageType: %d", err, messageType)
 				if websocket.IsUnexpectedCloseError(err) {
 					log.Errorf("Unexpected websocket closure: %v", err)
-					c.tryReconnect(ctx)
+					c.tryReconnect()
 					return
 				}
 				if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 					log.Errorf("Websocket read error: %v", err)
-					c.tryReconnect(ctx)
+					c.tryReconnect()
 					return
 				}
 				return
@@ -151,7 +151,7 @@ func (c *WSClient) messageLoop(ctx context.Context) {
 }
 
 // tryReconnect implements exponential backoff reconnection
-func (c *WSClient) tryReconnect(ctx context.Context) {
+func (c *WSClient) tryReconnect() {
 	c.mu.Lock()
 	if c.status == StatusReconnecting {
 		c.mu.Unlock()
@@ -166,7 +166,7 @@ func (c *WSClient) tryReconnect(ctx context.Context) {
 
 		time.Sleep(wait)
 
-		if err := c.Connect(ctx); err == nil {
+		if err := c.Connect(context.Background()); err == nil {
 			return
 		}
 

@@ -40,12 +40,12 @@ func main() {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 
-	// 设置连接超时
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// // 设置连接超时
+	// ctx, cancel := core.NewTimeoutContext(5 * time.Second)
+	// defer cancel()
 
 	// 建立连接
-	if err := wsClient.Connect(ctx); err != nil {
+	if err := wsClient.Connect(context.Background()); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer wsClient.Close()
