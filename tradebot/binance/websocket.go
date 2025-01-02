@@ -91,22 +91,22 @@ func (c *BinanceWSClient) SubscribeBookL1(symbol string) error {
 	return c.Subscribe(symbol, "bookTicker")
 }
 
-func (c *BinanceWSClient) HandleMessage(msg map[string]interface{}) {
-	event := msg["e"]
-	switch event {
-	case "trade":
-		trade, err := c.HandleTradeMessage(msg)
-		if err != nil {
-			// ignore error
-			log.Errorf("failed to handle trade message: %v", err)
-		}
-		// todo: send to msgbus
-	case "bookTicker":
-		bookTicker, err := c.HandleBookL1Message(msg)
-		if err != nil {
-			// ignore error
-			log.Errorf("failed to handle bookTicker message: %v", err)
-		}
-		// todo: send to msgbus
-	}
-}
+// func (c *BinanceWSClient) HandleMessage(msg map[string]interface{}) {
+// 	event := msg["e"]
+// 	switch event {
+// 	case "trade":
+// 		trade, err := c.HandleTradeMessage(msg)
+// 		if err != nil {
+// 			// ignore error
+// 			log.Errorf("failed to handle trade message: %v", err)
+// 		}
+// 		// todo: send to msgbus
+// 	case "bookTicker":
+// 		bookTicker, err := c.HandleBookL1Message(msg)
+// 		if err != nil {
+// 			// ignore error
+// 			log.Errorf("failed to handle bookTicker message: %v", err)
+// 		}
+// 		// todo: send to msgbus
+// 	}
+// }

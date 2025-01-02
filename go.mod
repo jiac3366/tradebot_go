@@ -7,6 +7,7 @@ toolchain go1.23.4
 require (
 	github.com/BitofferHub/pkg v1.0.2
 	github.com/go-playground/validator/v10 v10.15.5
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	golang.org/x/time v0.8.0
 )
