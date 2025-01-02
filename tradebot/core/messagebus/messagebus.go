@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 )
 
+var msgBus *MessageBus
+var msgBusOnce sync.Once
+
 // MessageBus represents a generic message bus implementation
 type MessageBus struct {
 	traderID   string
@@ -35,6 +38,19 @@ type MessageBus struct {
 
 	subscriptions sync.Map // map[SubscriptionID]Subscription
 	topicSubs     sync.Map // map[string][]SubscriptionID
+}
+
+
+func GetMessageBus(
+	traderID string,
+	instanceID uuid.UUID,
+	name string,
+	config *Config,
+) *MessageBus {
+	msgBusOnce.Do(func() {
+		msgBus = NewMessageBus(traderID, instanceID, name, config)
+	})
+	return msgBus
 }
 
 // NewMessageBus creates a new message bus instance

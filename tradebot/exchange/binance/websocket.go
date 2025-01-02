@@ -2,10 +2,10 @@ package binance
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 	"tradebot_go/tradebot/core"
+	"tradebot_go/tradebot/core/messagebus"
 
 	log "github.com/BitofferHub/pkg/middlewares/log"
 )
@@ -13,11 +13,14 @@ import (
 // WSCliBinanceWSClientent represents a Binance WebSocket client
 type BinanceWSClient struct {
 	wsClient *core.WSClient // Change from embedding to composition
+	msgBus   *messagebus.MessageBus
 }
 
 // NewBinanceWSClient creates a new BinanceWSClient
-func NewBinanceWSClient(accountType BinanceAccountType, handler core.MessageHandler) (*BinanceWSClient, error) {
+func NewBinanceWSClient(accountType BinanceAccountType,
+	handler core.MessageHandler, msgBus *messagebus.MessageBus) (*BinanceWSClient, error) {
 	url := BinanceWebSocketURLs[accountType]
+
 	wsClient, err := core.NewWSClient(url, handler)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create websocket client: %w", err)
@@ -25,6 +28,7 @@ func NewBinanceWSClient(accountType BinanceAccountType, handler core.MessageHand
 
 	return &BinanceWSClient{
 		wsClient: wsClient,
+		msgBus:   msgBus,
 	}, nil
 }
 
@@ -58,31 +62,6 @@ func (c *BinanceWSClient) Connect(ctx context.Context) error {
 	return c.wsClient.Connect(ctx)
 }
 
-// parseMessage is a generic function to handle websocket messages
-func parseMessage[T any](msg map[string]interface{}) (*T, error) {
-	jsonBytes, err := json.Marshal(msg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal message: %w", err)
-	}
-
-	var result T
-	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
-	}
-
-	return &result, nil
-}
-
-// HandleTradeMessage converts raw message to Trade struct
-func (c *BinanceWSClient) HandleTradeMessage(msg map[string]interface{}) (*Trade, error) {
-	return parseMessage[Trade](msg)
-}
-
-// HandleBookTickerMessage converts raw message to BookTicker struct
-func (c *BinanceWSClient) HandleBookL1Message(msg map[string]interface{}) (*BookTicker, error) {
-	return parseMessage[BookTicker](msg)
-}
-
 func (c *BinanceWSClient) SubscribeTrade(symbol string) error {
 	return c.Subscribe(symbol, "trade")
 }
@@ -90,23 +69,3 @@ func (c *BinanceWSClient) SubscribeTrade(symbol string) error {
 func (c *BinanceWSClient) SubscribeBookL1(symbol string) error {
 	return c.Subscribe(symbol, "bookTicker")
 }
-
-// func (c *BinanceWSClient) HandleMessage(msg map[string]interface{}) {
-// 	event := msg["e"]
-// 	switch event {
-// 	case "trade":
-// 		trade, err := c.HandleTradeMessage(msg)
-// 		if err != nil {
-// 			// ignore error
-// 			log.Errorf("failed to handle trade message: %v", err)
-// 		}
-// 		// todo: send to msgbus
-// 	case "bookTicker":
-// 		bookTicker, err := c.HandleBookL1Message(msg)
-// 		if err != nil {
-// 			// ignore error
-// 			log.Errorf("failed to handle bookTicker message: %v", err)
-// 		}
-// 		// todo: send to msgbus
-// 	}
-// }
