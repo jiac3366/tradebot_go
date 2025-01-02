@@ -30,6 +30,7 @@ func NewBinanceWSClient(accountType BinanceAccountType, handler core.MessageHand
 
 // Subscribe subscribes to a market data stream
 func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
+	c.Connect(context.Background())
 	subId := fmt.Sprintf("%s@%s", symbol, streams)
 	c.wsClient.SubscribedStreams = append(c.wsClient.SubscribedStreams, subId)
 	msg := core.SubscribeMsg{
@@ -39,13 +40,17 @@ func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
 	}
 
 	log.Infof("Subscribing to %s@%s", symbol, streams)
-
 	return c.wsClient.WriteJSON(msg)
 }
 
 // Close closes the websocket connection
 func (c *BinanceWSClient) Close() error {
-	return c.wsClient.Close2()
+	return c.wsClient.Close()
+}
+
+// for testing reconnection function
+func (c *BinanceWSClient) CloseConnection() error {
+	return c.wsClient.CloseConnection()
 }
 
 // Connect establishes the websocket connection
@@ -53,17 +58,35 @@ func (c *BinanceWSClient) Connect(ctx context.Context) error {
 	return c.wsClient.Connect(ctx)
 }
 
-// HandleTradeMessage converts raw message to Trade struct
-func (c *BinanceWSClient) HandleTradeMessage(msg map[string]interface{}) (*Trade, error) {
+// handleMessage is a generic function to handle websocket messages
+func handleMessage[T any](msg map[string]interface{}) (*T, error) {
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	trade := &Trade{}
-	if err := json.Unmarshal(jsonBytes, trade); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal trade: %w", err)
+	var result T
+	if err := json.Unmarshal(jsonBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
 
-	return trade, nil
+	return &result, nil
+}
+
+// HandleTradeMessage converts raw message to Trade struct
+func (c *BinanceWSClient) HandleTradeMessage(msg map[string]interface{}) (*Trade, error) {
+	return handleMessage[Trade](msg)
+}
+
+// HandleBookTickerMessage converts raw message to BookTicker struct
+func (c *BinanceWSClient) HandleBookL1Message(msg map[string]interface{}) (*BookTicker, error) {
+	return handleMessage[BookTicker](msg)
+}
+
+func (c *BinanceWSClient) SubscribeTrade(symbol string) error {
+	return c.Subscribe(symbol, "trade")
+}
+
+func (c *BinanceWSClient) SubscribeBookL1(symbol string) error {
+	return c.Subscribe(symbol, "bookTicker")
 }

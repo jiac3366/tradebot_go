@@ -1,20 +1,46 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"golang.org/x/time/rate"
+	"sync"
 	"time"
 )
 
+type C struct {
+	*sync.Mutex
+}
+
+type A struct {
+	c   C
+	val int32
+}
+
+type B struct {
+	c   C
+	val int32
+}
+
+const N = 1000000
+
 func main() {
-	// 创建一个限流器：每300ms允许1个token
-	limiter := rate.NewLimiter(rate.Every(300*time.Millisecond), 1)
-	
-	// 运行10次来测试
-	for i := 0; i < 10; i++ {
-		// Wait会阻塞直到获得一个token
-		limiter.Wait(context.Background())
-		fmt.Printf("打印第 %d 次: %s\n", i+1, time.Now().Format("15:04:05.000"))
-	}
+	a := &A{}
+	b := &B{}
+	go func(a *A) {
+		for i := 0; i < N; i++ {
+			a.c.Lock()
+			a.val++
+			a.c.Unlock()
+		}
+	}(a)
+
+	go func(b *B) {
+		for i := 0; i < N; i++ {
+			b.c.Lock()
+			b.val++
+			b.c.Unlock()
+		}
+	}(b)
+
+	time.Sleep(2 * time.Second)
+	fmt.Println(a.val, b.val)
 }

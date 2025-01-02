@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -13,11 +14,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Add new connection states
 const (
-	StatusDisconnected = "disconnected"
-	StatusConnected    = "connected"
-	StatusReconnecting = "reconnecting"
+	// uninitialisedState
+	disconnectedState uint32 = iota
+	connectedState
+	connectingState
 )
 
 type MessageHandler func(message map[string]interface{}) error
@@ -27,7 +28,7 @@ type WSClient struct {
 	url        string
 	handler    MessageHandler
 	done       chan struct{}
-	status     string
+	status     atomic.Uint32
 	mu         sync.RWMutex
 	conn       *websocket.Conn
 	maxRetries int
@@ -37,6 +38,7 @@ type WSClient struct {
 	reconnectAttempt  int
 	SubscribedStreams []string
 	limiter           *rate.Limiter // Rate limiter for resubscription
+	closeOnce         sync.Once
 }
 
 // NewWSClient creates a new WebSocket client with improved configuration
@@ -48,39 +50,38 @@ func NewWSClient(url string, handler MessageHandler) (*WSClient, error) {
 		return nil, fmt.Errorf("message handler cannot be nil")
 	}
 
-	return &WSClient{
+	client := &WSClient{
 		url:           url,
 		handler:       handler,
 		done:          make(chan struct{}),
-		status:        StatusDisconnected,
 		maxRetries:    5,
 		reconnectWait: 5 * time.Second,
-		limiter:       rate.NewLimiter(rate.Every(300*time.Millisecond), 1), // 300ms per request, burst size of 1
-	}, nil
+		limiter:       rate.NewLimiter(rate.Every(300*time.Millisecond), 1),
+	}
+
+	// Initialize the atomic status
+	client.status.Store(disconnectedState)
+
+	return client, nil
 }
 
 func (c *WSClient) IsConnected() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.status == StatusConnected
+	return c.status.Load() == connectedState
 }
 
 // Connect with improved error handling and connection management
 func (c *WSClient) Connect(ctx context.Context) error {
 	defer func() {
-		c.mu.Lock()
-		if c.status != StatusConnected {
-			c.status = StatusDisconnected
+		if c.status.Load() != connectedState {
+			c.status.Store(disconnectedState)
 		}
-		c.mu.Unlock()
 	}()
 
 	if c.IsConnected() {
 		return nil
 	}
-	c.mu.Lock()
-	c.status = StatusReconnecting
-	c.mu.Unlock()
+
+	c.status.Store(connectingState)
 
 	dialer := websocket.DefaultDialer
 	conn, _, err := dialer.DialContext(ctx, c.url, nil)
@@ -109,7 +110,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.conn = conn
-	c.status = StatusConnected
+	c.status.Store(connectedState)
 	c.reconnectAttempt = 0
 	c.mu.Unlock()
 
@@ -157,25 +158,20 @@ func (c *WSClient) messageLoop(ctx context.Context) {
 // tryReconnect implements exponential backoff reconnection
 func (c *WSClient) tryReconnect() {
 	defer func() {
-		c.mu.Lock()
-		if c.status != StatusConnected {
-			c.status = StatusDisconnected
+		if c.status.Load() != connectedState {
+			c.status.Store(disconnectedState)
 		}
-		c.mu.Unlock()
 	}()
 
-	log.Infof("tryReconnect")
-
-	c.mu.Lock()
-	if c.status == StatusReconnecting {
-		c.mu.Unlock()
+	if c.status.Load() == connectingState {
 		return
 	}
 
+	c.mu.Lock()
 	if c.conn != nil {
 		log.Infof("tryReconnect: Closing websocket connection first")
 		c.conn.Close()
-		c.status = StatusDisconnected
+		c.status.Store(disconnectedState)
 	}
 	c.mu.Unlock()
 
@@ -256,19 +252,23 @@ func (c *WSClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.status == StatusDisconnected {
+	if c.status.Load() == disconnectedState {
 		return nil
 	}
-	c.status = StatusDisconnected
+	c.status.Store(disconnectedState)
 
-	close(c.done)
+	// 使用 sync.Once 安全地关闭 channel
+	c.closeOnce.Do(func() {
+		close(c.done)
+	})
+
 	if c.conn != nil {
 		return c.conn.Close()
 	}
 	return nil
 }
 
-func (c *WSClient) Close2() error {
+func (c *WSClient) CloseConnection() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
