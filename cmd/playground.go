@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"tradebot_go/tradebot/binance"
+	"tradebot_go/tradebot/exchange/binance"
 	"tradebot_go/tradebot/core/messagebus"
 )
 

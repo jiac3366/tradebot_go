@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-playground/validator/v10"
-	"tradebot_go/tradebot/binance"
+	"tradebot_go/tradebot/exchange/binance"
 )
 
 // ... existing code ...

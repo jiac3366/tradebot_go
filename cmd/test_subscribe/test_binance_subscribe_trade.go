@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"tradebot_go/tradebot/binance"
+	"tradebot_go/tradebot/exchange/binance"
 )
 
 var wsClient *binance.BinanceWSClient
