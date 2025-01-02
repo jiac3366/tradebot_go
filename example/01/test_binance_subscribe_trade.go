@@ -20,7 +20,7 @@ func handleBookL1Stream(msg map[string]interface{}) error {
 		return fmt.Errorf("failed to handle trade message: %w", err)
 	}
 
-	fmt.Printf("BookL1: Symbol=%s, BidPrice=%s, BidQty=%s, AskPrice=%s, AskQty=%s",
+	fmt.Printf("BookL1: Symbol=%s, BidPrice=%s, BidQty=%s, AskPrice=%s, AskQty=%s\n",
 		bookL1.Symbol, bookL1.BidPrice, bookL1.BidQty, bookL1.AskPrice, bookL1.AskQty)
 	return nil
 }
@@ -37,6 +37,7 @@ func handleTradeStream(msg map[string]interface{}) error {
 		trade.Symbol, trade.Price, trade.Quantity, trade.IsMaker, delay)
 	return nil
 }
+
 
 func main() {
 	var err error
@@ -59,6 +60,7 @@ func main() {
 	if err := wsClient.SubscribeBookL1("btcusdt"); err != nil {
 		log.Fatalf("Failed to subscribe: %v", err)
 	}
+	
 
 	time.Sleep(15 * time.Second)
 	// test

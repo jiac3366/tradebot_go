@@ -14,16 +14,16 @@ package binance
 //		"M": true           // Ignore
 //	}
 type Trade struct {
-	EventType  string `json:"e"`
-	EventTime  int64  `json:"E"`
-	Symbol     string `json:"s"`
-	TradeID    int64  `json:"t"`
-	Price      string `json:"p"`
-	Quantity   string `json:"q"`
-	TradeTime  int64  `json:"T"`
-	IsMaker    bool   `json:"m"`
-	Ignore     bool   `json:"M"`
-	MarketType string `json:"X"`
+    EventType  string `json:"e" validate:"required"`
+    EventTime  int64  `json:"E" validate:"required"`
+    Symbol     string `json:"s" validate:"required"`
+    TradeID    int64  `json:"t" validate:"required"`
+    Price      string `json:"p" validate:"required"`
+    Quantity   string `json:"q" validate:"required"`
+    TradeTime  int64  `json:"T" validate:"required"`
+    IsMaker    bool   `json:"m" validate:"required"`
+    Ignore     bool   `json:"M"`
+    MarketType string `json:"X"`
 }
 
 // bookTicker

@@ -58,8 +58,8 @@ func (c *BinanceWSClient) Connect(ctx context.Context) error {
 	return c.wsClient.Connect(ctx)
 }
 
-// handleMessage is a generic function to handle websocket messages
-func handleMessage[T any](msg map[string]interface{}) (*T, error) {
+// parseMessage is a generic function to handle websocket messages
+func parseMessage[T any](msg map[string]interface{}) (*T, error) {
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal message: %w", err)
@@ -75,12 +75,12 @@ func handleMessage[T any](msg map[string]interface{}) (*T, error) {
 
 // HandleTradeMessage converts raw message to Trade struct
 func (c *BinanceWSClient) HandleTradeMessage(msg map[string]interface{}) (*Trade, error) {
-	return handleMessage[Trade](msg)
+	return parseMessage[Trade](msg)
 }
 
 // HandleBookTickerMessage converts raw message to BookTicker struct
 func (c *BinanceWSClient) HandleBookL1Message(msg map[string]interface{}) (*BookTicker, error) {
-	return handleMessage[BookTicker](msg)
+	return parseMessage[BookTicker](msg)
 }
 
 func (c *BinanceWSClient) SubscribeTrade(symbol string) error {
@@ -89,4 +89,24 @@ func (c *BinanceWSClient) SubscribeTrade(symbol string) error {
 
 func (c *BinanceWSClient) SubscribeBookL1(symbol string) error {
 	return c.Subscribe(symbol, "bookTicker")
+}
+
+func (c *BinanceWSClient) HandleMessage(msg map[string]interface{}) {
+	event := msg["e"]
+	switch event {
+	case "trade":
+		trade, err := c.HandleTradeMessage(msg)
+		if err != nil {
+			// ignore error
+			log.Errorf("failed to handle trade message: %v", err)
+		}
+		// todo: send to msgbus
+	case "bookTicker":
+		bookTicker, err := c.HandleBookL1Message(msg)
+		if err != nil {
+			// ignore error
+			log.Errorf("failed to handle bookTicker message: %v", err)
+		}
+		// todo: send to msgbus
+	}
 }
