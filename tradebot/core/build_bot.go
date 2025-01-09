@@ -24,7 +24,7 @@ func GetRootPath() string {
 	return rootPath
 }
 
-func init() {
+func InitLogger() {
 	// 使用 GetRootPath() 构建日志路径
 	logPath := filepath.Join(GetRootPath(), ".log")
 
@@ -36,4 +36,8 @@ func init() {
 		log.WithMaxSize(1024*1024*10),
 		log.WithConsole(false),
 	)
+}
+
+func init() {
+	InitLogger()
 }

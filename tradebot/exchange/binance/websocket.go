@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"tradebot_go/tradebot/core"
+	"tradebot_go/tradebot/base"
 	"tradebot_go/tradebot/core/messagebus"
 
 	log "github.com/BitofferHub/pkg/middlewares/log"
@@ -12,16 +12,16 @@ import (
 
 // WSCliBinanceWSClientent represents a Binance WebSocket client
 type BinanceWSClient struct {
-	wsClient *core.WSClient // Change from embedding to composition
+	wsClient *base.WSClient // Change from embedding to composition
 	msgBus   *messagebus.MessageBus
 }
 
 // NewBinanceWSClient creates a new BinanceWSClient
 func NewBinanceWSClient(accountType BinanceAccountType,
-	handler core.MessageHandler, msgBus *messagebus.MessageBus) (*BinanceWSClient, error) {
+	handler base.MessageHandler, msgBus *messagebus.MessageBus) (*BinanceWSClient, error) {
 	url := BinanceWebSocketURLs[accountType]
 
-	wsClient, err := core.NewWSClient(url, handler)
+	wsClient, err := base.NewWSClient(url, handler)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create websocket client: %w", err)
 	}
@@ -37,7 +37,7 @@ func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
 	c.Connect(context.Background())
 	subId := fmt.Sprintf("%s@%s", symbol, streams)
 	c.wsClient.SubscribedStreams = append(c.wsClient.SubscribedStreams, subId)
-	msg := core.SubscribeMsg{
+	msg := base.SubscribeMsg{
 		Method: "SUBSCRIBE",
 		Params: []string{subId},
 		ID:     time.Now().UnixNano(),
