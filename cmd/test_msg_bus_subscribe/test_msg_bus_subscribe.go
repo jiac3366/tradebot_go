@@ -11,6 +11,7 @@ import (
 
 	"tradebot_go/tradebot/core/messagebus"
 	"tradebot_go/tradebot/exchange/binance"
+	"tradebot_go/tradebot/logger"
 )
 
 var connector *binance.BinancePublicConnector
@@ -18,6 +19,7 @@ var err error
 var msgBus *messagebus.MessageBus
 
 func init() {
+	logger.InitLogger()
 	msgBus = messagebus.GetMessageBus("test", uuid.New(), "test", &messagebus.Config{})
 	msgBus.Register("bookTicker", msgHandler)
 	msgBus.Register("trade", msgHandler)

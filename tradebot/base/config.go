@@ -1,6 +1,7 @@
-package config
+package base
 
 import (
+	"fmt"
 	"sync"
 
 	log "github.com/BitofferHub/pkg/middlewares/log"
@@ -45,6 +46,7 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 
+	config := &Config{}
 	if err := v.Unmarshal(config); err != nil {
 		return nil, err
 	}
@@ -53,6 +55,7 @@ func loadConfig(configPath string) (*Config, error) {
 
 func GetConfig(configPath string) *Config {
 	configOnce.Do(func() {
+		fmt.Printf("GetConfig: %+v\n", configPath)
 		c, err := loadConfig(configPath)
 		if err != nil {
 			log.Error(err)

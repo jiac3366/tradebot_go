@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"tradebot_go/tradebot/config"
+	"tradebot_go/tradebot/base"
 )
 
 // Trade represents a single trade from the account trade list
@@ -62,9 +62,8 @@ func NewClient(apiKey, secretKey string) *Client {
 }
 
 // NewClientWithConfig creates a new Binance API client using configuration from file
-func NewClientWithConfig(configPath string) (*Client, error) {
-	config := config.GetConfig(configPath)
-	return NewClient(config.BinanceFutureTestnet.APIKey, 
+func NewClientWithConfig(config *base.Config) (*Client, error) {
+	return NewClient(config.BinanceFutureTestnet.APIKey,
 		config.BinanceFutureTestnet.SecretKey), nil
 }
 

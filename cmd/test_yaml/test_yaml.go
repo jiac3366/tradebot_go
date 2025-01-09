@@ -5,7 +5,7 @@ import (
 	"log"
 
 	// "tradebot_go/tradebot/exchange/binance"
-	"tradebot_go/tradebot/config"
+	"tradebot_go/tradebot/base"
 	"encoding/json"
 )
 
@@ -31,10 +31,7 @@ import (
 // }
 
 func main() {
-	config, err := config.LoadConfig(".keys/config.yaml")
-	if err != nil {
-		log.Fatal(err)
-	}
+	config := base.GetConfig(".keys/config.yaml")
 	fmt.Printf("%+v\n", config)
 
 	// to json
