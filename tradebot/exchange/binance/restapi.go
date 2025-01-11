@@ -3,7 +3,8 @@ package binance
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+
+	// "encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -52,9 +53,10 @@ type Client struct {
 }
 
 // NewClient creates a new Binance API client
-func NewClient(apiKey, secretKey string) *Client {
+func NewClient(apiKey, secretKey string, accountType BinanceAccountType) *Client {
+	baseURL := BinanceHttpURLs[accountType]
 	return &Client{
-		baseURL:   "https://fapi.binance.com",
+		baseURL:   baseURL,
 		apiKey:    apiKey,
 		secretKey: secretKey,
 		client:    &http.Client{Timeout: 10 * time.Second},
@@ -62,51 +64,57 @@ func NewClient(apiKey, secretKey string) *Client {
 }
 
 // NewClientWithConfig creates a new Binance API client using configuration from file
-func NewClientWithConfig(config *base.Config) (*Client, error) {
+func NewClientWithConfig(config *base.Config, accountType BinanceAccountType) (*Client, error) {
 	return NewClient(config.BinanceFutureTestnet.APIKey,
-		config.BinanceFutureTestnet.SecretKey), nil
+		config.BinanceFutureTestnet.SecretKey, accountType), nil
 }
 
 // GetTradeList retrieves the account's trade list for a specific symbol
-func (c *Client) GetTradeList(params TradeListParams) ([]BinanceTrade, error) {
+func (c *Client) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error) {
 	endpoint := "/fapi/v1/userTrades"
 
-	// Build query parameters
-	query := url.Values{}
-	query.Add("symbol", params.Symbol)
-	query.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	// Create query parameters
+	values := url.Values{}
+	values.Add("symbol", params.Symbol)
+	values.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
+	// Add optional parameters if they exist
 	if params.OrderID != nil {
-		query.Add("orderId", strconv.FormatInt(*params.OrderID, 10))
+		values.Add("orderId", strconv.FormatInt(*params.OrderID, 10))
 	}
 	if params.StartTime != nil {
-		query.Add("startTime", strconv.FormatInt(*params.StartTime, 10))
+		values.Add("startTime", strconv.FormatInt(*params.StartTime, 10))
 	}
 	if params.EndTime != nil {
-		query.Add("endTime", strconv.FormatInt(*params.EndTime, 10))
+		values.Add("endTime", strconv.FormatInt(*params.EndTime, 10))
 	}
 	if params.FromID != nil {
-		query.Add("fromId", strconv.FormatInt(*params.FromID, 10))
+		values.Add("fromId", strconv.FormatInt(*params.FromID, 10))
 	}
 	if params.Limit != nil {
-		query.Add("limit", strconv.Itoa(*params.Limit))
+		values.Add("limit", strconv.Itoa(*params.Limit))
 	}
 	if params.RecvWindow != nil {
-		query.Add("recvWindow", strconv.FormatInt(*params.RecvWindow, 10))
+		values.Add("recvWindow", strconv.FormatInt(*params.RecvWindow, 10))
 	}
 
-	// Sign the request
-	signature := c.generateSignature(query.Encode())
-	query.Add("signature", signature)
+	// Generate signature from the query string
+	queryString := values.Encode()
+	signature := c.generateSignature(queryString)
+
+	// Add signature to query parameters
+	finalQueryString := queryString + "&signature=" + signature
 
 	// Create request
-	req, err := c.buildRequest(http.MethodGet, endpoint, query)
+	req, err := c.buildRequest(http.MethodGet, endpoint, finalQueryString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request: %w", err)
 	}
 
 	// Add API key header
-	req.Header.Add("X-MBX-APIKEY", c.apiKey)
+	req.Header.Set("X-MBX-APIKEY", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "TradingBot/1.0")
 
 	// Execute request
 	var trades []BinanceTrade
@@ -121,18 +129,28 @@ func (c *Client) GetTradeList(params TradeListParams) ([]BinanceTrade, error) {
 func (c *Client) generateSignature(queryString string) string {
 	mac := hmac.New(sha256.New, []byte(c.secretKey))
 	mac.Write([]byte(queryString))
-	return hex.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("%x", mac.Sum(nil))
 }
 
-// buildRequest creates an HTTP request with the given parameters
-func (c *Client) buildRequest(method, endpoint string, query url.Values) (*http.Request, error) {
+// func Hmac(secretKey string, data string) (*string, error) {
+// 	mac := hmac.New(sha256.New, []byte(secretKey))
+// 	_, err := mac.Write([]byte(data))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	encodeData := fmt.Sprintf("%x", (mac.Sum(nil)))
+// 	return &encodeData, nil
+// }
+
+// buildRequestx creates an HTTP request with the given parameters
+func (c *Client) buildRequest(method, endpoint, queryString string) (*http.Request, error) {
 	u, err := url.Parse(c.baseURL + endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	if query != nil {
-		u.RawQuery = query.Encode()
+	if queryString != "" {
+		u.RawQuery = queryString
 	}
 
 	req, err := http.NewRequest(method, u.String(), nil)

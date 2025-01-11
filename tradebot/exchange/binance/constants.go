@@ -71,3 +71,16 @@ var BinanceWebSocketURLs = map[BinanceAccountType]string{
 	BinanceAccountTypeUsdMFuturesTestnet:  "wss://stream.binancefuture.com/ws",
 	BinanceAccountTypeCoinMFuturesTestnet: "wss://dstream.binancefuture.com/ws",
 }
+
+
+var BinanceHttpURLs = map[BinanceAccountType]string{
+	BinanceAccountTypeSpot:                "https://api.binance.com",
+	BinanceAccountTypeMargin:              "https://api.binance.com",
+	BinanceAccountTypeIsolatedMargin:      "https://api.binance.com",
+	BinanceAccountTypeUsdMFutures:         "https://fapi.binance.com",
+	BinanceAccountTypeCoinMFutures:        "https://dapi.binance.com",
+	BinanceAccountTypePortfolioMargin:     "https://fapi.binance.com",
+	BinanceAccountTypeSpotTestnet:         "https://testnet.binance.vision",
+	BinanceAccountTypeUsdMFuturesTestnet:  "https://testnet.binancefuture.com",
+	BinanceAccountTypeCoinMFuturesTestnet: "https://testnet.dapi.binance.com",
+}
