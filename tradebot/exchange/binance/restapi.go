@@ -75,8 +75,8 @@ func (c *Client) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error
 
 	// Create query parameters
 	values := url.Values{}
-	values.Add("symbol", params.Symbol)
-	values.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	values.Set("symbol", params.Symbol)
+	values.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
 	// Add optional parameters if they exist
 	if params.OrderID != nil {
@@ -100,13 +100,10 @@ func (c *Client) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error
 
 	// Generate signature from the query string
 	queryString := values.Encode()
-	signature := c.generateSignature(queryString)
-
-	// Add signature to query parameters
-	finalQueryString := queryString + "&signature=" + signature
+	queryString += "&signature=" + c.generateSignature(queryString)
 
 	// Create request
-	req, err := c.buildRequest(http.MethodGet, endpoint, finalQueryString)
+	req, err := c.buildRequest(http.MethodGet, endpoint, queryString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request: %w", err)
 	}
