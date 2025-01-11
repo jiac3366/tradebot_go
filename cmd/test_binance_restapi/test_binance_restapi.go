@@ -27,10 +27,8 @@ func main() {
 	configPath := filepath.Join(r, ".keys", "config.yaml")
 	config := base.GetConfig(configPath)
 
-	client, err := binance.NewClientWithConfig(config, binance.BinanceAccountTypeUsdMFuturesTestnet)
-	if err != nil {
-		log.Fatal(err)
-	}
+	client := binance.NewBinanceClient(config, binance.BinanceAccountTypeUsdMFuturesTestnet)
+
 	tradeList, err := client.GetFApiTradeList(binance.TradeListParams{
 		Symbol: "BTCUSDT",
 	})

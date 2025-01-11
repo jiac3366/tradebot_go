@@ -4,8 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 
-	// "encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -44,33 +42,20 @@ type TradeListParams struct {
 	RecvWindow *int64
 }
 
-// Client represents a Binance API client
-type Client struct {
-	baseURL   string
-	apiKey    string
-	secretKey string
-	client    *http.Client
+type BinanceClient struct {
+	baseClient *base.Client
 }
 
-// NewClient creates a new Binance API client
-func NewClient(apiKey, secretKey string, accountType BinanceAccountType) *Client {
+func NewBinanceClient(config *base.Config, accountType BinanceAccountType) *BinanceClient {
 	baseURL := BinanceHttpURLs[accountType]
-	return &Client{
-		baseURL:   baseURL,
-		apiKey:    apiKey,
-		secretKey: secretKey,
-		client:    &http.Client{Timeout: 10 * time.Second},
+	baseClient := base.NewClient(config.BinanceFutureTestnet.APIKey, config.BinanceFutureTestnet.SecretKey, baseURL)
+	return &BinanceClient{
+		baseClient: baseClient,
 	}
 }
 
-// NewClientWithConfig creates a new Binance API client using configuration from file
-func NewClientWithConfig(config *base.Config, accountType BinanceAccountType) (*Client, error) {
-	return NewClient(config.BinanceFutureTestnet.APIKey,
-		config.BinanceFutureTestnet.SecretKey, accountType), nil
-}
-
 // GetTradeList retrieves the account's trade list for a specific symbol
-func (c *Client) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error) {
+func (c *BinanceClient) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error) {
 	endpoint := "/fapi/v1/userTrades"
 
 	// Create query parameters
@@ -103,19 +88,19 @@ func (c *Client) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error
 	queryString += "&signature=" + c.generateSignature(queryString)
 
 	// Create request
-	req, err := c.buildRequest(http.MethodGet, endpoint, queryString)
+	req, err := c.baseClient.BuildRequest(http.MethodGet, endpoint, queryString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request: %w", err)
 	}
 
 	// Add API key header
-	req.Header.Set("X-MBX-APIKEY", c.apiKey)
+	req.Header.Set("X-MBX-APIKEY", c.baseClient.ApiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "TradingBot/1.0")
 
 	// Execute request
 	var trades []BinanceTrade
-	if err := c.sendRequest(req, &trades); err != nil {
+	if err := c.baseClient.SendRequest(req, &trades); err != nil {
 		return nil, fmt.Errorf("failed to get trade list: %w", err)
 	}
 
@@ -123,65 +108,8 @@ func (c *Client) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error
 }
 
 // generateSignature creates HMAC SHA256 signature for the query string
-func (c *Client) generateSignature(queryString string) string {
-	mac := hmac.New(sha256.New, []byte(c.secretKey))
+func (c *BinanceClient) generateSignature(queryString string) string {
+	mac := hmac.New(sha256.New, []byte(c.baseClient.SecretKey))
 	mac.Write([]byte(queryString))
 	return fmt.Sprintf("%x", mac.Sum(nil))
-}
-
-// func Hmac(secretKey string, data string) (*string, error) {
-// 	mac := hmac.New(sha256.New, []byte(secretKey))
-// 	_, err := mac.Write([]byte(data))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	encodeData := fmt.Sprintf("%x", (mac.Sum(nil)))
-// 	return &encodeData, nil
-// }
-
-// buildRequestx creates an HTTP request with the given parameters
-func (c *Client) buildRequest(method, endpoint, queryString string) (*http.Request, error) {
-	u, err := url.Parse(c.baseURL + endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	if queryString != "" {
-		u.RawQuery = queryString
-	}
-
-	req, err := http.NewRequest(method, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// sendRequest sends an HTTP request and decodes the response into the result interface
-func (c *Client) sendRequest(req *http.Request, result interface{}) error {
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check if the status code indicates an error
-	if resp.StatusCode != http.StatusOK {
-		var apiErr struct {
-			Code    int    `json:"code"`
-			Message string `json:"msg"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
-			return fmt.Errorf("http status %d: failed to decode error response: %w", resp.StatusCode, err)
-		}
-		return fmt.Errorf("api error: code=%d, message=%s", apiErr.Code, apiErr.Message)
-	}
-
-	// Decode the successful response
-	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return nil
 }
