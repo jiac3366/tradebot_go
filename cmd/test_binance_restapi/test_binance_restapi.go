@@ -29,7 +29,7 @@ func main() {
 
 	client := binance.NewBinanceClient(config, binance.BinanceAccountTypeUsdMFuturesTestnet)
 
-	tradeList, err := client.GetFApiTradeList(binance.TradeListParams{
+	tradeList, err := client.GetFApiTradeList(&binance.TradeListParams{
 		Symbol: "BTCUSDT",
 	})
 	if err != nil {

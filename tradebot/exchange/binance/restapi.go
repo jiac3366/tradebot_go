@@ -3,7 +3,8 @@ package binance
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -43,25 +44,26 @@ type TradeListParams struct {
 }
 
 type BinanceClient struct {
-	baseClient *base.Client
+	*base.Client
+	ExID string
 }
 
 func NewBinanceClient(config *base.Config, accountType BinanceAccountType) *BinanceClient {
 	baseURL := BinanceHttpURLs[accountType]
 	baseClient := base.NewClient(config.BinanceFutureTestnet.APIKey, config.BinanceFutureTestnet.SecretKey, baseURL)
 	return &BinanceClient{
-		baseClient: baseClient,
+		Client: baseClient,
+		ExID:   "binance",
 	}
 }
 
 // GetTradeList retrieves the account's trade list for a specific symbol
-func (c *BinanceClient) GetFApiTradeList(params TradeListParams) ([]BinanceTrade, error) {
+func (c *BinanceClient) GetFApiTradeList(params *TradeListParams) ([]BinanceTrade, error) {
 	endpoint := "/fapi/v1/userTrades"
 
 	// Create query parameters
 	values := url.Values{}
-	values.Set("symbol", params.Symbol)
-	values.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	values.Add("symbol", params.Symbol)
 
 	// Add optional parameters if they exist
 	if params.OrderID != nil {
@@ -83,25 +85,20 @@ func (c *BinanceClient) GetFApiTradeList(params TradeListParams) ([]BinanceTrade
 		values.Add("recvWindow", strconv.FormatInt(*params.RecvWindow, 10))
 	}
 
-	// Generate signature from the query string
-	queryString := values.Encode()
-	queryString += "&signature=" + c.generateSignature(queryString)
-
-	// Create request
-	req, err := c.baseClient.BuildRequest(http.MethodGet, endpoint, queryString)
+	resp, err := c.fetch(FetchRequest{
+		Method:   http.MethodGet,
+		Endpoint: endpoint,
+		Payload:  &values,
+		Signed:   true,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to build request: %w", err)
+		return nil, fmt.Errorf("failed to get trade list: %w", err)
 	}
 
-	// Add API key header
-	req.Header.Set("X-MBX-APIKEY", c.baseClient.ApiKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "TradingBot/1.0")
-
-	// Execute request
+	// Parse response
 	var trades []BinanceTrade
-	if err := c.baseClient.SendRequest(req, &trades); err != nil {
-		return nil, fmt.Errorf("failed to get trade list: %w", err)
+	if err := json.Unmarshal(resp, &trades); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	return trades, nil
@@ -109,7 +106,51 @@ func (c *BinanceClient) GetFApiTradeList(params TradeListParams) ([]BinanceTrade
 
 // generateSignature creates HMAC SHA256 signature for the query string
 func (c *BinanceClient) generateSignature(queryString string) string {
-	mac := hmac.New(sha256.New, []byte(c.baseClient.SecretKey))
+	mac := hmac.New(sha256.New, []byte(c.SecretKey))
 	mac.Write([]byte(queryString))
-	return fmt.Sprintf("%x", mac.Sum(nil))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+type FetchRequest struct {
+	Method   string
+	Endpoint string
+	Payload  *url.Values
+	Signed   bool
+}
+
+// Fetch sends a request to the API with optional signing
+func (c *BinanceClient) fetch(req FetchRequest) ([]byte, error) {
+	// Prepare payload with timestamp
+	if req.Payload == nil {
+		req.Payload = &url.Values{}
+	}
+	req.Payload.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+
+	queryString := req.Payload.Encode()
+
+	// Add signature if required
+	if req.Signed {
+		queryString += "&signature=" + c.generateSignature(queryString)
+	}
+
+	// Build and send request
+	httpReq, err := c.BuildRequest(req.Method, req.Endpoint, queryString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	// Add API key header if signed request
+	if req.Signed {
+		httpReq.Header.Add("X-MBX-APIKEY", c.ApiKey)
+	}
+	httpReq.Header.Add("Content-Type", "application/json")
+	httpReq.Header.Add("User-Agent", "TradingBot/1.0")
+
+	// Send request and handle response
+	var result json.RawMessage
+	if err := c.SendRequest(httpReq, &result); err != nil {
+		return nil, fmt.Errorf("fetch request failed: %w", err)
+	}
+
+	return result, nil
 }

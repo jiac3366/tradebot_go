@@ -12,8 +12,8 @@ import (
 
 // WSCliBinanceWSClientent represents a Binance WebSocket client
 type BinanceWSClient struct {
-	wsClient *base.WSClient // Change from embedding to composition
-	msgBus   *messagebus.MessageBus
+	*base.WSClient
+	msgBus *messagebus.MessageBus
 }
 
 // NewBinanceWSClient creates a new BinanceWSClient
@@ -27,7 +27,7 @@ func NewBinanceWSClient(accountType BinanceAccountType,
 	}
 
 	return &BinanceWSClient{
-		wsClient: wsClient,
+		WSClient: wsClient,
 		msgBus:   msgBus,
 	}, nil
 }
@@ -36,7 +36,7 @@ func NewBinanceWSClient(accountType BinanceAccountType,
 func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
 	c.Connect(context.Background())
 	subId := fmt.Sprintf("%s@%s", symbol, streams)
-	c.wsClient.SubscribedStreams = append(c.wsClient.SubscribedStreams, subId)
+	c.SubscribedStreams = append(c.SubscribedStreams, subId)
 	msg := base.SubscribeMsg{
 		Method: "SUBSCRIBE",
 		Params: []string{subId},
@@ -44,22 +44,7 @@ func (c *BinanceWSClient) Subscribe(symbol string, streams string) error {
 	}
 
 	log.Infof("Subscribing to %s@%s", symbol, streams)
-	return c.wsClient.WriteJSON(msg)
-}
-
-// Close closes the websocket connection
-func (c *BinanceWSClient) Close() error {
-	return c.wsClient.Close()
-}
-
-// for testing reconnection function
-func (c *BinanceWSClient) CloseConnection() error {
-	return c.wsClient.CloseConnection()
-}
-
-// Connect establishes the websocket connection
-func (c *BinanceWSClient) Connect(ctx context.Context) error {
-	return c.wsClient.Connect(ctx)
+	return c.WriteJSON(msg)
 }
 
 func (c *BinanceWSClient) SubscribeTrade(symbol string) error {
